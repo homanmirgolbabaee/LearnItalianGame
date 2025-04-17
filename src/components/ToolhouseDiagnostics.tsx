@@ -124,8 +124,7 @@ const ToolhouseDiagnostics: React.FC = () => {
     }
   };
 
-  // Test full integration
-  // Test full integration
+  // Test full integration with the new prompt format
   const testIntegration = async () => {
     setIsLoading(true);
     setIntegrationTestResult(null);
@@ -148,23 +147,16 @@ const ToolhouseDiagnostics: React.FC = () => {
         dangerouslyAllowBrowser: true
       });
       
-      // Use a more explicit prompt to ensure proper JSON format
+      // Use the updated prompt format
       const messages = [{
         "role": "user",
-        "content": `Generate 3 Italian words and save them to my memory.
-        
-  OUTPUT FORMAT (FOLLOW THIS EXACTLY):
-  {
-    "word_1": "FirstItalianWord",
-    "word_2": "SecondItalianWord",
-    "word_3": "ThirdItalianWord"
-  }
-
-  RULES:
-  - Provide ONLY the JSON object with no additional text
-  - Use common Italian nouns that would be useful for a language learner
-  - Make sure the words are spelled correctly in Italian
-  - Do not include translations or explanations in your response`,
+        "content": `Strictly List 3 Italian words then save it to my memory, make sure the 3 Italian words are not present in my memory so im always learning a new set of words with its translations in English.
+EXPECTED OUTPUT FORMAT (IMPORTANT):
+    { "italian": "FirstWord", "english": "FirstTranslation" },
+    { "italian": "SecondWord", "english": "SecondTranslation" },
+    { "italian": "ThirdWord", "english": "ThirdTranslation" }
+IMPORTANT RULES:
+- DO NOT add any explanation or text ONLY the numbered list.`,
       }];
       
       // Get tools
@@ -206,42 +198,51 @@ const ToolhouseDiagnostics: React.FC = () => {
       
       // Parse JSON if possible
       try {
-        // Try to extract JSON object 
-        const jsonMatch = content.match(/\{[\s\S]*\}/);
-        const jsonStr = jsonMatch ? jsonMatch[0] : content;
-        let parsed;
-        
-        try {
-          parsed = JSON.parse(jsonStr);
-        } catch (parseError) {
-          // If parsing fails, create a default structure
-          console.log("Error parsing JSON, creating default structure");
+        // Try to extract array of word pairs
+        const arrayMatch = content.match(/\[\s*{[\s\S]*}\s*\]/);
+        if (arrayMatch) {
+          const cleanedJson = arrayMatch[0];
+          const parsed = JSON.parse(cleanedJson);
           
-          // Extract any Italian-looking words from the content if possible
-          const wordExtraction = content.match(/\b[A-Za-zÀ-ÖØ-öø-ÿ]{3,}\b/g);
-          if (wordExtraction && wordExtraction.length >= 3) {
-            parsed = {
-              word_1: wordExtraction[0],
-              word_2: wordExtraction[1],
-              word_3: wordExtraction[2]
-            };
-          } else {
-            // Default fallback words
-            parsed = {
-              word_1: "albero", // tree
-              word_2: "casa",   // house
-              word_3: "libro"   // book
-            };
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            const validItems = parsed.filter(item => 
+              item.italian && item.english
+            );
+            
+            if (validItems.length > 0) {
+              setIntegrationTestResult({
+                success: true,
+                message: 'Integration test successful! Parsed word data:',
+                data: validItems.slice(0, 3)
+              });
+              return;
+            }
           }
         }
         
+        // Try to extract individual JSON objects
+        const itemMatches = [...content.matchAll(/{\s*"italian"\s*:\s*"([^"]+)"\s*,\s*"english"\s*:\s*"([^"]+)"\s*}/g)];
+        if (itemMatches.length > 0) {
+          const data = itemMatches.map(match => ({
+            italian: match[1],
+            english: match[2]
+          })).slice(0, 3);
+          
+          setIntegrationTestResult({
+            success: true,
+            message: 'Integration test successful! Extracted word data:',
+            data: data
+          });
+          return;
+        }
+        
+        // If we can't parse properly, show the raw response
         setIntegrationTestResult({
           success: true,
-          message: 'Integration test successful!',
-          data: parsed
+          message: 'Received response, but need to analyze result format. See raw output below.',
         });
-      } catch (parseError) {
-        console.error('Error processing response:', parseError);
+      } catch (error) {
+        console.error('Error processing response:', error);
         
         // Show response even if parsing failed
         setIntegrationTestResult({
@@ -385,7 +386,7 @@ const ToolhouseDiagnostics: React.FC = () => {
             {/* Integration Tab */}
             <TabsContent value="integration" className="space-y-4">
               <div className="space-y-4">
-                <p>This test will run the full integration between Toolhouse.ai and OpenAI to generate Italian words.</p>
+                <p>This test will run the full integration between Toolhouse.ai and OpenAI to generate Italian words with translations.</p>
                 
                 {integrationTestResult && (
                   <Alert variant={integrationTestResult.success ? "default" : "destructive"}>
@@ -402,7 +403,7 @@ const ToolhouseDiagnostics: React.FC = () => {
                 {integrationTestResult?.data && (
                   <div className="mt-4 p-4 bg-slate-100 rounded-md">
                     <h4 className="text-sm font-medium mb-2">Parsed Response:</h4>
-                    <pre className="text-xs whitespace-pre-wrap">
+                    <pre className="text-xs whitespace-pre-wrap overflow-auto max-h-64">
                       {JSON.stringify(integrationTestResult.data, null, 2)}
                     </pre>
                   </div>
@@ -456,6 +457,5 @@ const ToolhouseDiagnostics: React.FC = () => {
       </Card>
     </div>
   );
-};
-
+}
 export default ToolhouseDiagnostics;
