@@ -32,7 +32,7 @@ const FlashCard = ({ word, useElevenLabs = false }: FlashCardProps) => {
     try {
       if (useElevenLabs) {
         console.log("Using ElevenLabs for TTS");
-        // Use ElevenLabs TTS
+        // Use ElevenLabs TTS with Italian language code
         await playTextWithElevenLabs(
           word.italian, 
           LANGUAGE_CODES.ITALIAN
@@ -63,26 +63,41 @@ const FlashCard = ({ word, useElevenLabs = false }: FlashCardProps) => {
   const playEnglishAudio = async (e: React.MouseEvent) => {
     e.stopPropagation(); // Prevent card from flipping
     
-    if (isPlaying) return; // Prevent multiple clicks
+    if (isPlaying) {
+      console.log("Already playing audio, ignoring click");
+      return; // Prevent multiple clicks
+    }
     
+    console.log(`Attempting to play English audio: "${word.english}" using ${useElevenLabs ? "ElevenLabs" : "Browser TTS"}`);
     setIsPlaying(true);
     
     try {
       if (useElevenLabs) {
-        // Use ElevenLabs TTS for English
+        console.log("Using ElevenLabs for English TTS");
+        // Use ElevenLabs TTS for English - explicitly use English language code
         await playTextWithElevenLabs(
           word.english,
           LANGUAGE_CODES.ENGLISH
         );
+        console.log("English ElevenLabs playback completed");
       } else {
+        console.log("Using browser's built-in TTS for English");
         // Fallback to browser's built-in TTS
         const utterance = new SpeechSynthesisUtterance(word.english);
         utterance.lang = "en-US";
+        
+        // Add event listeners for debugging
+        utterance.onstart = () => console.log("English Browser TTS started");
+        utterance.onend = () => console.log("English Browser TTS ended");
+        utterance.onerror = (e) => console.error("English Browser TTS error:", e);
+        
         speechSynthesis.speak(utterance);
+        console.log("English Browser TTS request sent");
       }
     } catch (error) {
-      console.error("Error playing audio:", error);
+      console.error("Error playing English audio:", error);
     } finally {
+      console.log("Setting isPlaying to false");
       setIsPlaying(false);
     }
   };
