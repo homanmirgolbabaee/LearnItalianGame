@@ -13,12 +13,13 @@ import {
   DialogFooter
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { ItalianWord } from "@/data/italianWords";
 import {
   fetchItalianWords,
-  translateItalianWords,
-  convertToolhouseResponseToItalianWords,
-  setOpenAIApiKey
+  setOpenAIApiKey,
+  convertToItalianWords,
+  setOfflineMode
 } from "@/services/toolhouseService";
 
 interface QuizGeneratorProps {
@@ -31,6 +32,7 @@ const QuizGenerator: React.FC<QuizGeneratorProps> = ({ onGenerateQuiz }) => {
   const [success, setSuccess] = useState<string | null>(null);
   const [showApiKeyDialog, setShowApiKeyDialog] = useState(false);
   const [apiKey, setApiKey] = useState(localStorage.getItem('openaiApiKey') || '');
+  const [useOfflineMode, setUseOfflineMode] = useState(false);
   const [initialLoad, setInitialLoad] = useState(true);
 
   // Check for API key and automatically generate on first load
@@ -50,8 +52,8 @@ const QuizGenerator: React.FC<QuizGeneratorProps> = ({ onGenerateQuiz }) => {
   }, [initialLoad]);
 
   const generateQuiz = async () => {
-    // Check if API key is set
-    if (!localStorage.getItem('openaiApiKey')) {
+    // Check if API key is set or using offline mode
+    if (!localStorage.getItem('openaiApiKey') && !useOfflineMode) {
       setShowApiKeyDialog(true);
       return;
     }
@@ -61,37 +63,20 @@ const QuizGenerator: React.FC<QuizGeneratorProps> = ({ onGenerateQuiz }) => {
     setSuccess(null);
 
     try {
-      // Step 1: Fetch new Italian words
-      const wordsResponse = await fetchItalianWords();
+      // Configure offline mode in the service
+      setOfflineMode(useOfflineMode);
       
-      if (!wordsResponse) {
+      // Fetch Italian words with their English translations directly
+      const wordResponses = await fetchItalianWords();
+      
+      if (!wordResponses || wordResponses.length === 0) {
         throw new Error("Failed to generate words. Please try again.");
       }
       
-      // Immediately create initial flashcards with placeholder translations
-      const initialWords = convertToolhouseResponseToItalianWords(wordsResponse);
-      onGenerateQuiz(initialWords);
+      // Convert to ItalianWord format
+      const wordObjects = convertToItalianWords(wordResponses);
       
-      // Extract the Italian words
-      const italianWords = [
-        wordsResponse.word_1,
-        wordsResponse.word_2,
-        wordsResponse.word_3
-      ];
-      
-      // Show initial success message
-      setSuccess("New Italian words generated! Fetching translations...");
-      
-      // Step 2: Translate the words
-      const translations = await translateItalianWords(italianWords);
-      
-      // Step 3: Convert to ItalianWord format with translations
-      const wordObjects = convertToolhouseResponseToItalianWords(
-        wordsResponse,
-        translations
-      );
-      
-      // Update the flashcards with translations
+      // Update the flashcards
       onGenerateQuiz(wordObjects);
       
       // Update success message
@@ -103,7 +88,7 @@ const QuizGenerator: React.FC<QuizGeneratorProps> = ({ onGenerateQuiz }) => {
       }, 3000);
     } catch (err) {
       console.error('Error generating quiz:', err);
-      setError('Failed to generate quiz. Please check your OpenAI API key and try again.');
+      setError('Failed to generate quiz. Please check your OpenAI API key and try again or enable offline mode.');
     } finally {
       setIsLoading(false);
     }
@@ -120,9 +105,15 @@ const QuizGenerator: React.FC<QuizGeneratorProps> = ({ onGenerateQuiz }) => {
     }
   };
 
+  const toggleOfflineMode = () => {
+    const newOfflineMode = !useOfflineMode;
+    setUseOfflineMode(newOfflineMode);
+    setOfflineMode(newOfflineMode);
+  };
+
   return (
     <div className="mb-6 flex flex-col items-center">
-      <div className="flex justify-center mb-2 w-full">
+      <div className="flex flex-col sm:flex-row gap-2 mb-2 w-full justify-center items-center">
         <Button
           onClick={generateQuiz}
           disabled={isLoading}
@@ -141,6 +132,20 @@ const QuizGenerator: React.FC<QuizGeneratorProps> = ({ onGenerateQuiz }) => {
             </>
           )}
         </Button>
+        
+        <div className="flex items-center gap-2 px-3 py-2 bg-background rounded-md border w-full sm:w-auto justify-center">
+          <Switch 
+            id="offline-mode" 
+            checked={useOfflineMode}
+            onCheckedChange={toggleOfflineMode}
+          />
+          <Label htmlFor="offline-mode" className="flex items-center gap-1 cursor-pointer">
+            Offline Mode
+            {useOfflineMode && (
+              <AlertTriangle className="h-4 w-4 text-amber-500" />
+            )}
+          </Label>
+        </div>
       </div>
       
       <div className="mt-3 w-full max-w-md">
@@ -156,6 +161,14 @@ const QuizGenerator: React.FC<QuizGeneratorProps> = ({ onGenerateQuiz }) => {
             <ThumbsUp className="h-4 w-4 text-green-500" />
             <AlertTitle>Success</AlertTitle>
             <AlertDescription>{success}</AlertDescription>
+          </Alert>
+        )}
+        
+        {useOfflineMode && (
+          <Alert className="mt-2 bg-amber-50 border-amber-300">
+            <AlertDescription>
+              Using offline mode with sample Italian words. Connect your OpenAI API key for online word generation.
+            </AlertDescription>
           </Alert>
         )}
       </div>
@@ -191,8 +204,13 @@ const QuizGenerator: React.FC<QuizGeneratorProps> = ({ onGenerateQuiz }) => {
           </div>
           
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowApiKeyDialog(false)}>
-              Cancel
+            <Button variant="outline" onClick={() => {
+              setShowApiKeyDialog(false);
+              setUseOfflineMode(true);
+              setOfflineMode(true);
+              generateQuiz();
+            }}>
+              Skip & Use Offline Mode
             </Button>
             <Button onClick={handleSaveApiKey} disabled={!apiKey.trim()}>
               Save & Generate
