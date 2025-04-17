@@ -7,6 +7,8 @@ import CategorySelector from "@/components/CategorySelector";
 import CardCounter from "@/components/CardCounter";
 import ElevenLabsConfig from "@/components/ElevenLabsConfig";
 import ElevenLabsTtsTest from "@/components/ElevenLabsTtsTest";
+import QuizGenerator from "@/components/QuizGenerator";
+import ToolhouseDiagnostics from "@/components/ToolhouseDiagnostics";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, ArrowRight, Settings, AlertTriangle, Bug } from "lucide-react";
 import { initElevenLabs } from "@/services/simpleElevenLabsService";
@@ -23,12 +25,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 const Index = () => {
   const [currentCardIndex, setCurrentCardIndex] = useState(0);
   const [completedCards, setCompletedCards] = useState<number[]>([]);
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [showElevenLabsConfig, setShowElevenLabsConfig] = useState(false);
   const [useElevenLabs, setUseElevenLabs] = useState(false);
   const [hasApiKey, setHasApiKey] = useState(false);
   const [activeTab, setActiveTab] = useState<string>("main");
   const [debugMode, setDebugMode] = useState(false);
+  const [generatedWords, setGeneratedWords] = useState<any[]>([]);
 
   // Enable debug mode in development or if debug parameter is in URL
   useEffect(() => {
@@ -62,17 +64,15 @@ const Index = () => {
     }
   }, []);
 
-  // Get unique categories from all words
+  // Define default categories since we're not using pre-defined words
   const categories = useMemo(() => {
-    const categoriesSet = new Set(italianWords.map(word => word.category));
-    return Array.from(categoriesSet);
+    return ["Generated", "Recent", "Favorites"];
   }, []);
 
-  // Filter words based on selected category
+  // Use only generated words
   const filteredWords = useMemo(() => {
-    if (!selectedCategory) return italianWords;
-    return getWordsByCategory(selectedCategory);
-  }, [selectedCategory]);
+    return generatedWords;
+  }, [generatedWords]);
 
   const handleNextCard = () => {
     // Mark current card as completed if not already
@@ -98,8 +98,8 @@ const Index = () => {
     setCompletedCards([]);
   };
 
-  const handleCategoryChange = (category: string | null) => {
-    setSelectedCategory(category);
+  const handleGenerateQuiz = (words: any[]) => {
+    setGeneratedWords(words);
     setCurrentCardIndex(0);
     setCompletedCards([]);
   };
@@ -186,11 +186,30 @@ const Index = () => {
         
         <TabsContent value="main" className="space-y-4">
           <div className="max-w-md mx-auto w-full">
-            <CategorySelector
-              categories={categories}
-              selectedCategory={selectedCategory}
-              onSelectCategory={handleCategoryChange}
-            />
+            {/* Remove category selector since we're only using generated words */}
+            
+            {/* Quiz Generator component */}
+            <div className="mt-4">
+              <QuizGenerator onGenerateQuiz={handleGenerateQuiz} />
+            </div>
+            
+            {generatedWords.length > 0 && (
+              <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-md text-center">
+                <p className="text-sm text-blue-800">
+                  Using AI-generated words from Toolhouse.ai
+                </p>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="mt-2"
+                  onClick={() => {
+                    setGeneratedWords([]);
+                  }}
+                >
+                  Clear Words & Generate New
+                </Button>
+              </div>
+            )}
           </div>
 
           <QuizProgress 
@@ -243,13 +262,8 @@ const Index = () => {
               </>
             ) : (
               <div className="text-center p-8 bg-italian-white rounded-lg shadow-md">
-                <p className="text-xl text-italian-blue">No cards found in this category.</p>
-                <Button 
-                  onClick={() => handleCategoryChange(null)}
-                  className="btn-italian mt-4"
-                >
-                  Show All Cards
-                </Button>
+                <p className="text-xl text-italian-blue">No flashcards available yet.</p>
+                <p className="text-italian-blue mt-2">Click the "Generate New Italian Words" button to get started.</p>
               </div>
             )}
           </div>
@@ -257,6 +271,11 @@ const Index = () => {
         
         {debugMode && (
           <TabsContent value="debug" className="space-y-8">
+            <div className="bg-white p-4 rounded-lg shadow">
+              <h2 className="text-xl font-bold mb-4 text-italian-blue">Toolhouse.ai & OpenAI API Diagnostics</h2>
+              <ToolhouseDiagnostics />
+            </div>
+            
             <div className="bg-white p-4 rounded-lg shadow">
               <h2 className="text-xl font-bold mb-4 text-italian-blue">ElevenLabs TTS Diagnostics</h2>
               <ElevenLabsTtsTest />
@@ -270,6 +289,13 @@ const Index = () => {
                   <div className="bg-gray-100 p-3 rounded">
                     <p><strong>API Key Set:</strong> {hasApiKey ? "Yes" : "No"}</p>
                     <p><strong>TTS Enabled:</strong> {useElevenLabs ? "Yes" : "No"}</p>
+                  </div>
+                </div>
+                <div>
+                  <h3 className="font-medium mb-2">OpenAI API Status</h3>
+                  <div className="bg-gray-100 p-3 rounded">
+                    <p><strong>API Key Set:</strong> {localStorage.getItem('openaiApiKey') ? "Yes" : "No"}</p>
+                    <p><strong>Required for:</strong> Toolhouse word generation</p>
                   </div>
                 </div>
                 <div>
